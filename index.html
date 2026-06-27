@@ -384,7 +384,7 @@ input[type=range]{accent-color:var(--accent);width:96px}
       <input type="file" id="importFile" accept="application/json,.json" hidden>
     </div>
     <button class="bk-status" id="bkStatus" title="Estado da cópia de segurança"></button>
-    <div class="app-ver" id="appVer">v22</div>
+    <div class="app-ver" id="appVer">v23</div>
     <div class="list" id="list"></div>
   </aside>
 
@@ -832,8 +832,23 @@ function linesToHTML(lines,tr,useFlat){
   }
   return body;
 }
+/* ---- manter o ecrã ligado (Screen Wake Lock) ---- */
+let _wakeLock=null;
+async function wakeOn(){
+  if(!('wakeLock' in navigator))return;
+  try{ if(!_wakeLock){ _wakeLock=await navigator.wakeLock.request('screen');
+    _wakeLock.addEventListener('release',()=>{_wakeLock=null;}); } }catch(e){}
+}
+function wakeMaybeOff(){
+  if(_wakeLock && !cur && !drPlaying){ try{_wakeLock.release();}catch(e){} _wakeLock=null; }
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && !_wakeLock && (cur||drPlaying)) wakeOn();
+});
+
 function openSong(s){
   cur=s; transpose=0; updTr();
+  wakeOn();
   stopScroll();
   const useFlat=FLATKEYS.has(s.key);
   const body=linesToHTML(s.lines,transpose,useFlat);
@@ -1392,6 +1407,7 @@ function drStart(){
   $('#drumBtn').classList.add('playing');
   const m=$('#metro');if(m)m.classList.add('show');
   drScheduler();
+  wakeOn();
 }
 function drStop(){
   drPlaying=false;if(drTimer)clearTimeout(drTimer);
@@ -1399,6 +1415,7 @@ function drStop(){
   $('#drumBtn').classList.remove('playing');
   const m=$('#metro');if(m)m.classList.remove('show','b','d');
   $$('.dr-beat').forEach(el=>el.classList.remove('on','down'));
+  wakeMaybeOff();
 }
 function drToggle(){drPlaying?drStop():drStart();}
 function drRenderStyles(){
@@ -1561,6 +1578,7 @@ $('#tnStrings').addEventListener('click',e=>{const b=e.target.closest('[data-str
 
 function showWelcome(){
   cur=null;
+  wakeMaybeOff();
   sheetEl.innerHTML=`<div class="welcome">
     <div class="wc-chords">G&nbsp;&nbsp;D&nbsp;&nbsp;Em&nbsp;&nbsp;C</div>
     <div class="big">Escolhe uma música</div>
