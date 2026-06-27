@@ -74,9 +74,9 @@ body:not(.paper) .brand .logo{filter:invert(1)}
 /* ---- list ---- */
 .list{overflow-y:auto;flex:1;padding:4px 8px 16px}
 .group{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
-  font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink);
-  padding:14px 12px 6px;position:sticky;top:0;background:var(--bg2);z-index:2;
-  border-bottom:1px solid var(--line);margin-bottom:2px}
+  font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink-dim);
+  padding:16px 12px 7px;position:sticky;top:0;z-index:2;letter-spacing:.01em;
+  background:linear-gradient(var(--bg2),var(--bg2) 72%,transparent)}
 .group .gc{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--ink-faint);
   background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:1px 7px}
 .song{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;
@@ -89,8 +89,9 @@ body:not(.paper) .brand .logo{filter:invert(1)}
 .song .fav{flex:0 0 auto;font-size:15px;color:var(--ink-faint);opacity:0;transition:.12s}
 .song:hover .fav{opacity:.6}
 .song .fav.on{opacity:1;color:var(--star)}
-.song .key{flex:0 0 auto;font-family:var(--mono);font-size:11px;color:var(--ink-faint);
-  border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.song .key{flex:0 0 auto;font-family:var(--mono);font-size:11px;color:var(--chord);
+  border:1px solid var(--line);background:rgba(244,169,60,.06);border-radius:6px;padding:2px 6px}
+.paper .song .key{background:rgba(189,106,26,.08)}
 .empty-list{padding:40px 20px;text-align:center;color:var(--ink-faint);font-size:14px;line-height:1.6}
 
 /* ---- main / toolbar ---- */
@@ -113,33 +114,51 @@ input[type=range]{accent-color:var(--accent);width:96px}
 
 /* ---- sheet ---- */
 .scroll{overflow-y:auto;flex:1;min-height:0;scroll-behavior:auto}
+.playhead{position:absolute;left:0;right:0;top:38%;height:0;z-index:6;pointer-events:none;
+  opacity:0;transition:opacity .35s}
+.playhead.on{opacity:1}
+.playhead::before{content:"";position:absolute;left:18px;right:18px;top:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--chord),transparent);
+  box-shadow:0 0 16px 2px rgba(244,169,60,.4)}
+.playhead .ph-dot{position:absolute;left:10px;top:-3px;width:8px;height:8px;border-radius:50%;
+  background:var(--chord);box-shadow:0 0 12px 3px rgba(244,169,60,.55)}
+.paper .playhead::before{box-shadow:0 0 10px 1px rgba(189,106,26,.35)}
+.paper .playhead .ph-dot{box-shadow:0 0 8px 2px rgba(189,106,26,.45)}
 .sheet{max-width:820px;margin:0 auto;padding:30px 34px 60vh}
-.head{margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--line)}
-.head h2{font-family:var(--serif);font-weight:600;font-size:30px;margin:0 0 4px;line-height:1.1}
-.head .by{color:var(--ink-dim);font-size:16px}
-.head .meta{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+.head{margin-bottom:24px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.head h2{font-family:var(--serif);font-weight:600;font-size:31px;margin:0 0 4px;line-height:1.04;letter-spacing:-.015em}
+.head .by{color:var(--ink-dim);font-size:15px}
+.head .meta{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}
 .tag{font-size:12px;color:var(--ink-dim);background:var(--surface);border:1px solid var(--line);
-  border-radius:6px;padding:3px 9px}
-.tag b{color:var(--chord);font-family:var(--mono);font-weight:600}
+  border-radius:8px;padding:4px 10px;font-family:var(--mono)}
+.tag b{color:var(--chord);font-family:var(--mono);font-weight:700}
 .tag.cap b{color:var(--accent)}
+.bpmtag{color:var(--chord);border-color:var(--line-2,var(--line))}
 
-.lines{font-family:var(--mono);font-size:var(--sheet);line-height:1.5;white-space:pre;
+.lines{font-family:var(--mono);font-size:var(--sheet);line-height:1.55;white-space:pre;
   overflow-x:auto;-webkit-overflow-scrolling:touch}
 .ln{white-space:pre;min-height:.6em}
 .ln.c{color:var(--chord);font-weight:600;text-shadow:var(--chord-glow)}
 .ln.l{color:var(--ink)}
-.ln.s{color:var(--accent);font-weight:600;font-family:var(--sans);font-size:calc(var(--sheet) - 1px);
-  white-space:normal;margin:10px 0 2px;letter-spacing:.02em}
+.ln.s{color:var(--accent);font-weight:700;font-family:var(--sans);
+  font-size:calc(var(--sheet) - 5px);text-transform:uppercase;letter-spacing:.1em;
+  white-space:normal;margin:22px 0 6px}
+.ln.s:first-child{margin-top:0}
 .ln.b{color:var(--tab);font-size:calc(var(--sheet) - 3px);line-height:1.35}
 .ln.e{height:.7em}
 
 .welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;
   text-align:center;color:var(--ink-faint);padding:30px}
-.welcome .big{font-family:var(--serif);font-size:26px;color:var(--ink-dim);margin-bottom:8px}
-.welcome p{max-width:380px;line-height:1.6;font-size:14px}
-.welcome .keys{margin-top:18px;display:grid;grid-template-columns:auto auto;gap:6px 14px;font-size:13px}
+.welcome .wc-chords{font-family:var(--mono);font-size:30px;font-weight:600;color:var(--chord);
+  text-shadow:var(--chord-glow);letter-spacing:.22em;margin-bottom:24px;padding-left:.22em}
+.welcome .big{font-family:var(--serif);font-size:30px;font-weight:600;color:var(--ink);
+  margin-bottom:10px;letter-spacing:-.015em}
+.welcome p{max-width:400px;line-height:1.65;font-size:14px;color:var(--ink-faint)}
+.welcome p b{color:var(--accent);font-weight:600}
+.welcome .keys{margin-top:24px;display:grid;grid-template-columns:auto auto;gap:8px 14px;font-size:13px;
+  text-align:left;color:var(--ink-dim)}
 .welcome .keys kbd{font-family:var(--mono);background:var(--surface);border:1px solid var(--line);
-  border-radius:5px;padding:1px 7px;color:var(--ink-dim)}
+  border-bottom-width:2px;border-radius:6px;padding:2px 8px;color:var(--ink);justify-self:start}
 
 /* ---- scroll fab (mobile) ---- */
 .fab{display:none}
@@ -328,7 +347,8 @@ input[type=range]{accent-color:var(--accent);width:96px}
 .dr-style{background:var(--surface);border:1px solid var(--line);color:var(--ink-dim);
   border-radius:999px;padding:7px 14px;font-size:13px}
 .dr-style:hover{color:var(--ink);border-color:var(--ink-faint)}
-.dr-style.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.dr-style.on{background:var(--chord);border-color:var(--chord);color:#1c1206;font-weight:600}
+.paper .dr-style.on{color:#fff}
 .dr-vol{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-dim)}
 .dr-vol button{width:30px;height:30px;border-radius:7px;background:var(--surface);border:1px solid var(--line);color:var(--ink-dim)}
 .dr-volval{font-family:var(--mono);min-width:18px;text-align:center;color:var(--ink)}
@@ -364,7 +384,7 @@ input[type=range]{accent-color:var(--accent);width:96px}
       <input type="file" id="importFile" accept="application/json,.json" hidden>
     </div>
     <button class="bk-status" id="bkStatus" title="Estado da cópia de segurança"></button>
-    <div class="app-ver" id="appVer">v19</div>
+    <div class="app-ver" id="appVer">v22</div>
     <div class="list" id="list"></div>
   </aside>
 
@@ -411,6 +431,7 @@ input[type=range]{accent-color:var(--accent);width:96px}
     <div class="scroll" id="scroll">
       <div id="sheet"></div>
     </div>
+    <div class="playhead" id="playhead" aria-hidden="true"><span class="ph-dot"></span></div>
   </main>
 </div>
 
@@ -918,9 +939,11 @@ function updSpdDisplay(){
 function setSpd(v){scrollSpeed=Math.max(1,Math.min(20,v));store.set('cif.spd',scrollSpeed);updSpdDisplay();}
 function startScroll(){if(scrolling||!cur)return;scrolling=true;
   $('#scrollBtn').classList.add('active');$('#scrollBtn').innerHTML='❚❚ <span class="lab">parar</span>';
+  const ph=$('#playhead');if(ph)ph.classList.add('on');
   if(typeof drLinkScroll!=='undefined'&&drLinkScroll&&!drPlaying){drStart();drumByScroll=true;}
   raf=requestAnimationFrame(scrollStep);}
 function stopScroll(){scrolling=false;if(raf)cancelAnimationFrame(raf);
+  const ph=$('#playhead');if(ph)ph.classList.remove('on');
   if(drumByScroll){drStop();drumByScroll=false;}
   const b=$('#scrollBtn');if(b){b.classList.remove('active');b.innerHTML='▶ <span class="lab">rolar</span>';}}
 $('#scrollBtn').onclick=()=>scrolling?stopScroll():startScroll();
@@ -1244,9 +1267,9 @@ $('#importFile').addEventListener('change',e=>{if(e.target.files[0])importUser(e
 
 /* ---------- bateria / ritmo ---------- */
 const DR_PAT={
-  rock:   {sub:4,len:16,beats:4,K:[0,8],      S:[4,12], G:[],       R:[], H:[0,2,4,6,8,10,12,14], O:[]},
-  pop:    {sub:4,len:16,beats:4,K:[0,8],      S:[0,4,10,12], M:[8,9], G:[], R:[], H:[0,2,4,6,8,10,12,14], O:[]},
-  balada: {sub:4,len:16,beats:4,K:[0,8],      S:[4,12], G:[],       R:[], H:[0,4,8,12],           O:[]},
+  rock:   {sub:4,len:16,beats:4,defbpm:124,K:[0,8,10], S:[4,12], M:[], G:[],   R:[],     H:[0,2,4,6,8,10,12], O:[14]},
+  pop:    {sub:4,len:16,beats:4,defbpm:112,K:[0,8,14], S:[4,12], M:[], G:[7,10],R:[],    H:[0,2,4,6,8,10,12,14], O:[]},
+  balada: {sub:4,len:16,beats:4,defbpm:72, K:[0,10],   S:[],     M:[], G:[],   R:[4,12], H:[0,2,4,6,8,10,12,14], O:[]},
   funk:   {sub:4,len:16,beats:4,K:[0,3,6,10], S:[4,12], G:[2,7,9,14],R:[],H:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], O:[8]},
   valsa:  {sub:4,len:12,beats:3,K:[0,6],      S:[4,8],  G:[],       R:[], H:[0,2,4,6,8,10], O:[]},
   shuffle:{sub:3,len:12,beats:4,K:[0,6,8],    S:[3,9],  G:[5,11],   R:[], H:[0,2,3,5,6,8,9,11], O:[]},
@@ -1539,6 +1562,7 @@ $('#tnStrings').addEventListener('click',e=>{const b=e.target.closest('[data-str
 function showWelcome(){
   cur=null;
   sheetEl.innerHTML=`<div class="welcome">
+    <div class="wc-chords">G&nbsp;&nbsp;D&nbsp;&nbsp;Em&nbsp;&nbsp;C</div>
     <div class="big">Escolhe uma música</div>
     <p>${SONGS.length} cifras de ${artistCount()} artistas, prontas a tocar e offline. A lista está organizada por artista; procura por título ou artista, filtra por categoria e marca as favoritas. Usa <b>+ Nova música</b> para acrescentar as tuas.</p>
     <div class="keys">
