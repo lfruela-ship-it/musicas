@@ -302,6 +302,15 @@ input[type=range]{accent-color:var(--accent);width:96px}
 
 /* ---- versão ---- */
 .app-ver{text-align:center;font-size:10.5px;color:var(--ink-faint);margin-top:6px;letter-spacing:.04em}
+.sheet-tools{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 8px}
+.detect-btn,.paste-btn{font-size:12.5px;padding:6px 11px}
+.restore-btn{width:100%;margin-top:2px;font-size:12.5px;color:var(--ink-dim)}
+.hid-list{display:flex;flex-direction:column;max-height:54vh;overflow:auto}
+.hid-row{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}
+.hid-tt{flex:1;min-width:0}
+.hid-nm{font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hid-ar{font-size:12px;color:var(--ink-faint)}
+.hid-empty{color:var(--ink-faint);font-size:13px;padding:18px 4px;text-align:center}
 
 /* ---- diagramas de acordes ---- */
 .chordtok{cursor:pointer;border-radius:3px;padding:0 1px;transition:background .12s}
@@ -383,8 +392,9 @@ input[type=range]{accent-color:var(--accent);width:96px}
       <button class="ghost-btn" id="importBtn" title="Carregar músicas de um ficheiro">Importar</button>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
     </div>
+    <button class="ghost-btn restore-btn" id="restoreBtn" hidden title="Repor músicas removidas da lista"></button>
     <button class="bk-status" id="bkStatus" title="Estado da cópia de segurança"></button>
-    <div class="app-ver" id="appVer">v23</div>
+    <div class="app-ver" id="appVer">v25</div>
     <div class="list" id="list"></div>
   </aside>
 
@@ -502,6 +512,25 @@ input[type=range]{accent-color:var(--accent);width:96px}
   </div>
 </div>
 
+<!-- ----- Músicas removidas ----- -->
+<div class="modal" id="hidModal" hidden>
+  <div class="modal-scrim" id="hidScrim"></div>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="hidTitle">
+    <div class="dlg-head">
+      <h3 id="hidTitle">Músicas removidas</h3>
+      <button class="icon-btn" id="hidClose" title="Fechar (Esc)">✕</button>
+    </div>
+    <div class="dlg-body">
+      <div class="hid-list" id="hidList"></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="ghost-btn danger" id="hidAll">Repor todas</button>
+      <div class="sp"></div>
+      <button class="add-btn" id="hidDone">Concluído</button>
+    </div>
+  </div>
+</div>
+
 <!-- ----- Editor de música ----- -->
 <div class="modal" id="modal" hidden>
   <div class="modal-scrim" id="modalScrim"></div>
@@ -528,6 +557,10 @@ input[type=range]{accent-color:var(--accent);width:96px}
         <label>Compositor <span class="opt">(opcional)</span><input id="fComp" type="text" placeholder="Ex.: Miguel Araújo"></label>
         <label class="sheet-lab">Cifra
           <span class="hint">Põe cada linha de acordes <b>por cima</b> da letra. Os acordes são detetados automaticamente. Linhas como <code>[Refrão]</code> ou <code>Intro: D A G</code> também são reconhecidas.</span>
+          <div class="sheet-tools">
+            <button type="button" class="ghost-btn paste-btn" id="pasteBtn" title="Colar a cifra da área de transferência">📋 Colar</button>
+            <button type="button" class="ghost-btn detect-btn" id="detectBtn" title="Analisar o texto colado e preencher título, artista e tom">✨ Detetar do texto colado</button>
+          </div>
           <textarea id="fSheet" spellcheck="false" placeholder="D            G
 Quando Deus pôs o mundo
     D      A
@@ -567,6 +600,7 @@ function rebuildSongs(){
   SONGS = base.concat(USER);
   SONGS.sort((x,y)=>{const a=sk(x.artist),b=sk(y.artist);if(a<b)return -1;if(a>b)return 1;
     const t=sk(x.title),u=sk(y.title);return t<u?-1:t>u?1:0;});
+  if(typeof updRestoreBtn==='function')updRestoreBtn();
 }
 function artistCount(){return new Set(SONGS.map(s=>s.artist)).size;}
 
@@ -1074,6 +1108,8 @@ function move(d){if(!filtered.length)return;let i=curIndex();i=i<0?0:i+d;
 document.addEventListener('keydown',e=>{
   // diagrama de acorde aberto: só Esc fecha
   if(!$('#chordPop').hidden){if(e.key==='Escape'){e.preventDefault();closeChordPop();}return;}
+  // músicas removidas aberto: só Esc fecha
+  if(!$('#hidModal').hidden){if(e.key==='Escape'){e.preventDefault();$('#hidModal').hidden=true;}return;}
   // bateria aberta: Esc fecha, espaço toca/para
   if(!$('#drum').hidden){
     if(e.key==='Escape'){e.preventDefault();closeDrum();}
@@ -1129,9 +1165,10 @@ function openEditor(song){
   $('#fBpm').value=song&&song.bpm?song.bpm:'';
   $('#fComp').value=song?(song.composer||''):'';
   $('#fSheet').value=song?linesToText(song.lines):'';
-  $('#delBtn').hidden=!(song&&!builtin);          // apagar só para músicas próprias
+  $('#delBtn').hidden=!song;                       // remover/apagar qualquer música existente
+  $('#delBtn').textContent=builtin?'Remover':'Apagar';
   $('#resetBtn').hidden=!(builtin&&OVER[song.id]); // repor só se a embebida foi alterada
-  $('#fErr').textContent='';
+  $('#fErr').textContent='';$('#fErr').style.color='';
   modal.hidden=false;
   updatePreview();
   setTimeout(()=>$('#fTitle').focus(),30);
@@ -1155,7 +1192,7 @@ function collectSong(){
 }
 function saveSong(){
   const r=collectSong();
-  if(r.err){$('#fErr').textContent=r.err;return;}
+  if(r.err){$('#fErr').style.color='';$('#fErr').textContent=r.err;return;}
   let id;
   if(editing!=null&&editing<100000){            // alteração de música embebida -> override
     r.song.id=editing;OVER[editing]=r.song;HIDDEN.delete(editing);saveOver();saveHidden();id=editing;
@@ -1170,13 +1207,121 @@ function saveSong(){
   const saved=SONGS.find(s=>s.id===id);if(saved)openSong(saved);
 }
 function deleteSong(){
-  if(editing==null||editing<100000)return;       // só apaga músicas próprias
+  if(editing==null)return;
+  const id=editing, builtin=id<100000;
+  if(builtin){                                     // embebida -> ocultar (reversível)
+    if(!confirm('Remover esta música da lista? Podes repô-la depois em "Repor removidas".'))return;
+    HIDDEN.add(id);saveHidden();
+    rebuildSongs();closeEditor();renderFilters();renderList();
+    if(cur&&cur.id===id)showWelcome();
+    return;
+  }
   if(!confirm('Apagar esta música? Não pode ser anulado.'))return;
-  const id=editing;
   USER=USER.filter(s=>s.id!==id);favs.delete(id);saveFavs();
   for(const L of lists){const i=L.songs.indexOf(id);if(i>=0)L.songs.splice(i,1);}saveLists();
   saveUser();rebuildSongs();closeEditor();renderFilters();renderList();
   if(cur&&cur.id===id)showWelcome();
+}
+function updRestoreBtn(){
+  const b=$('#restoreBtn');if(!b)return;
+  b.hidden=HIDDEN.size===0;b.textContent='↺ Repor removidas ('+HIDDEN.size+')';
+}
+function openHidden(){
+  const items=BUILTIN.filter(s=>HIDDEN.has(s.id))
+    .sort((a,b)=>{const x=sk(a.artist)+sk(a.title),y=sk(b.artist)+sk(b.title);return x<y?-1:x>y?1:0;});
+  const L=$('#hidList');
+  if(!items.length){L.innerHTML='<div class="hid-empty">Não há músicas removidas.</div>';}
+  else L.innerHTML=items.map(s=>`<div class="hid-row">
+      <div class="hid-tt"><div class="hid-nm">${esc(s.title)}</div><div class="hid-ar">${esc(s.artist)}</div></div>
+      <button class="ghost-btn" data-rest="${s.id}">Repor</button></div>`).join('');
+  $('#hidModal').hidden=false;
+}
+function restoreOne(id){
+  HIDDEN.delete(id);saveHidden();rebuildSongs();renderFilters();renderList();
+  if(HIDDEN.size)openHidden();else $('#hidModal').hidden=true;
+}
+function restoreAll(){
+  if(!HIDDEN.size)return;
+  if(!confirm('Repor todas as músicas removidas?'))return;
+  HIDDEN.clear();saveHidden();rebuildSongs();renderFilters();renderList();$('#hidModal').hidden=true;
+}
+async function pasteSheet(){
+  const ta=$('#fSheet'),err=$('#fErr');
+  const wasEmpty=!ta.value.trim();
+  try{
+    if(!navigator.clipboard||!navigator.clipboard.readText)throw new Error('sem clipboard');
+    const txt=await navigator.clipboard.readText();
+    if(!txt||!txt.trim()){err.style.color='';err.textContent='A área de transferência está vazia.';return;}
+    const clean=txt.replace(/\r/g,'');
+    if(wasEmpty)ta.value=clean;
+    else{const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??ta.value.length;
+      ta.value=ta.value.slice(0,s)+clean+ta.value.slice(e);}
+    updatePreview();
+    if(wasEmpty&&!$('#fTitle').value.trim()){smartDetect();}        // um toque faz tudo
+    else{err.style.color='var(--accent)';err.textContent='Cifra colada. Toca em “Detetar” para preencher os campos.';}
+  }catch(e){
+    err.style.color='';
+    err.textContent='O navegador não deixou colar sozinho — toca na caixa e cola à mão (manter premido → Colar).';
+    ta.focus();
+  }
+}
+/* ---- deteção inteligente a partir de texto colado ---- */
+function artistKnown(name){const n=sk(name);return n&&SONGS.some(s=>sk(s.artist)===n);}
+function guessKeyFromChords(raw,kind){
+  const toks=[];
+  for(let i=0;i<raw.length;i++){if(kind[i]!=='c')continue;
+    raw[i].trim().split(/\s+/).forEach(t=>{const m=t.match(CH);if(m)toks.push(m);});}
+  if(!toks.length)return null;
+  const m=toks[toks.length-1];
+  return m[2]+(/^m(?!aj)/.test(m[3]||'')?'m':'');
+}
+function smartDetect(){
+  const ta=$('#fSheet'),err=$('#fErr');
+  const raw=ta.value.replace(/\r/g,'').split('\n');
+  if(!raw.join('').trim()){err.style.color='';err.textContent='Cola primeiro a cifra na caixa.';return;}
+  const kind=raw.map(l=>classify(l));
+  const remove=new Set(),got=[];
+  const reKey=/^\s*(?:tom|tonalidade|key)\s*[:\-–—]\s*(.+?)\s*$/i;
+  const reCapo=/^\s*(?:capo(?:traste)?|capod[aá]stro)\s*[:\-–—]?\s*(.+?)\s*$/i;
+  const reBpm=/^\s*(?:bpm|tempo|andamento)\s*[:\-–—]\s*(\d{2,3})/i;
+  const lim=Math.min(raw.length,12);
+  for(let i=0;i<lim;i++){const t=raw[i];if(!t.trim())continue;let m;
+    if((m=t.match(reKey))){if(!$('#fKey').value.trim()){$('#fKey').value=m[1].trim();got.push('tom');}remove.add(i);continue;}
+    if((m=t.match(reBpm))){if(!$('#fBpm').value.trim()){$('#fBpm').value=m[1];got.push('BPM');}remove.add(i);continue;}
+    if((m=t.match(reCapo))){if(!$('#fCapo').value.trim()){$('#fCapo').value=m[1].trim();got.push('capotraste');}remove.add(i);continue;}
+  }
+  const splitDash=s=>{const p=s.split(/\s+[-–—]\s+/);return p.length>=2?[p[0].trim(),p.slice(1).join(' - ').trim()]:null;};
+  if(!$('#fTitle').value.trim()){
+    const hdr=[];
+    for(let i=0;i<raw.length;i++){
+      if(remove.has(i))continue;
+      if(!raw[i].trim()){if(hdr.length)break;else continue;}
+      const k=kind[i];if(k==='c'||k==='s'||k==='b')break;
+      hdr.push(i);if(hdr.length>=3)break;
+    }
+    const lines=hdr.map(i=>raw[i].trim());let title=null,artist=null;
+    if(lines.length){
+      const d=splitDash(lines[0]);
+      if(d){const[a,b]=d;
+        if(artistKnown(b)){title=a;artist=b;}
+        else if(artistKnown(a)){artist=a;title=b;}
+        else{title=a;artist=b;}
+        remove.add(hdr[0]);
+      }else{title=lines[0];remove.add(hdr[0]);
+        if(lines[1]&&!splitDash(lines[1])){artist=lines[1];remove.add(hdr[1]);}}
+    }
+    if(title){$('#fTitle').value=title;got.push('título');}
+    if(artist&&!$('#fArtist').value.trim()){$('#fArtist').value=artist;got.push('artista');}
+  }
+  let guessed=false;
+  if(!$('#fKey').value.trim()){const k=guessKeyFromChords(raw,kind);
+    if(k){$('#fKey').value=k;guessed=true;got.push('tom estimado');}}
+  if(remove.size)ta.value=raw.filter((_,i)=>!remove.has(i)).join('\n').replace(/^\n+/,'');
+  updatePreview();
+  err.style.color='var(--accent)';
+  err.textContent=got.length
+    ?('Detetado: '+got.join(', ')+'. Confere'+(guessed?' o tom estimado':'')+' antes de guardar.')
+    :'Sem cabeçalho reconhecível — preenche os campos à mão.';
 }
 function resetBuiltin(){
   if(editing==null||editing>=100000)return;
@@ -1271,6 +1416,12 @@ $('#modalScrim').onclick=closeEditor;
 $('#saveBtn').onclick=saveSong;
 $('#delBtn').onclick=deleteSong;
 $('#resetBtn').onclick=resetBuiltin;
+$('#detectBtn').onclick=smartDetect;
+$('#pasteBtn').onclick=pasteSheet;
+$('#restoreBtn').onclick=openHidden;
+$('#hidClose').onclick=$('#hidDone').onclick=$('#hidScrim').onclick=()=>{$('#hidModal').hidden=true;};
+$('#hidAll').onclick=restoreAll;
+$('#hidList').onclick=e=>{const b=e.target.closest('[data-rest]');if(b)restoreOne(+b.dataset.rest);};
 $('#fSheet').addEventListener('input',updatePreview);
 $('#exportBtn').onclick=exportUser;
 $('#bkStatus').onclick=exportUser;
