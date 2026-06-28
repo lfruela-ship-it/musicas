@@ -87,6 +87,7 @@ body:not(.paper) .brand .logo{filter:invert(1)}
 .song .tt{font-size:14.5px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .song .ta{font-size:12px;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .song .fav{flex:0 0 auto;font-size:15px;color:var(--ink-faint);opacity:0;transition:.12s}
+.song .fav,.favtag,.chip .star{font-variant-emoji:text;background:none}
 .song:hover .fav{opacity:.6}
 .song .fav.on{opacity:1;color:var(--star)}
 .song .key{flex:0 0 auto;font-family:var(--mono);font-size:11px;color:var(--chord);
@@ -395,7 +396,7 @@ input[type=range]{accent-color:var(--accent);width:96px}
     </div>
     <button class="ghost-btn restore-btn" id="restoreBtn" hidden title="Repor músicas removidas da lista"></button>
     <button class="bk-status" id="bkStatus" title="Estado da cópia de segurança"></button>
-    <div class="app-ver" id="appVer">v27</div>
+    <div class="app-ver" id="appVer">v28</div>
     <div class="list" id="list"></div>
   </aside>
 
@@ -768,7 +769,7 @@ function renderList(){
     html+=`<div class="song${cur&&cur.id===s.id?' sel':''}" data-id="${s.id}">
       <div class="t"><div class="tt">${esc(s.title)}</div></div>
       ${s.key?`<span class="key">${esc(s.key)}</span>`:''}
-      <button class="fav${on}" data-fav="${s.id}" title="Favorita (f)">★</button></div>`;
+      <button class="fav${on}" data-fav="${s.id}" title="Favorita (f)">★︎</button></div>`;
   }
   listEl.innerHTML=html;
 }
@@ -914,7 +915,7 @@ function openSong(s){
         ${s.bpm?`<button class="tag bpmtag" id="bpmTag" title="Abrir a bateria a este andamento">♩ <b>${s.bpm}</b> BPM</button>`:''}
         ${s.composer?`<span class="tag">${esc(s.composer)}</span>`:''}
         <span class="tag">${s.cat}</span>
-        <button class="tag favtag${isFav?' on':''}" id="favTag" title="Favorita (f)">★ Favorita</button>
+        <button class="tag favtag${isFav?' on':''}" id="favTag" title="Favorita (f)">★︎ Favorita</button>
         <span class="listwrap"><button class="tag listtag" id="listTag" title="Adicionar a listas">▤ Listas</button>
           <div class="listmenu" id="listMenu" hidden></div></span>
         <button class="tag editbtn" id="editBtn" title="Editar">✎ editar</button>
@@ -1035,7 +1036,7 @@ function renderFilters(){
     {type:'all',label:'Todas'},
     {type:'cat',v:'Português',label:'Português'},
     {type:'cat',v:'Internacional',label:'Internacional'},
-    {type:'fav',label:'<span class="star">★</span> Favoritas'},
+    {type:'fav',label:'<span class="star">★︎</span> Favoritas'},
   ];
   let html='';
   for(const b of base){
