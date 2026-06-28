@@ -1,5 +1,5 @@
 // Service worker — Músicas e Acordes (offline)
-const CACHE = "musicas-acordes-v25";
+const CACHE = "musicas-acordes-v27";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

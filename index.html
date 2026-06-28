@@ -388,13 +388,14 @@ input[type=range]{accent-color:var(--accent);width:96px}
     <div class="filters" id="filters"></div>
     <div class="actions">
       <button class="add-btn" id="addBtn">+ Nova música</button>
-      <button class="ghost-btn" id="exportBtn" title="Guardar as tuas músicas num ficheiro">Exportar</button>
+      <button class="ghost-btn" id="exportBtn" title="Guardar só as tuas alterações (ficheiro pequeno)">Exportar</button>
+      <button class="ghost-btn" id="exportAllBtn" title="Guardar TODAS as músicas (cópia completa portável)">Exportar tudo</button>
       <button class="ghost-btn" id="importBtn" title="Carregar músicas de um ficheiro">Importar</button>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
     </div>
     <button class="ghost-btn restore-btn" id="restoreBtn" hidden title="Repor músicas removidas da lista"></button>
     <button class="bk-status" id="bkStatus" title="Estado da cópia de segurança"></button>
-    <div class="app-ver" id="appVer">v25</div>
+    <div class="app-ver" id="appVer">v27</div>
     <div class="list" id="list"></div>
   </aside>
 
@@ -421,16 +422,10 @@ input[type=range]{accent-color:var(--accent);width:96px}
         <span class="val" id="spdVal" title="Velocidade">8</span>
         <button id="spdUp" title="Mais rápido">+</button>
       </div>
-      <button class="icon-btn" id="drumBtn" title="Caixa de ritmos (b)">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="9" ry="3"/><path d="M3 6v6c0 1.7 4 3 9 3s9-1.3 9-3V6"/><path d="M3 12v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>
-      </button>
-      <button class="icon-btn" id="drumBtn" title="Ritmo / baterista (r)">
+      <button class="icon-btn" id="drumBtn" title="Caixa de ritmos (d)">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6.5" rx="8" ry="3"/><path d="M4 6.5v8c0 1.7 3.6 3 8 3s8-1.3 8-3v-8"/><path d="M9 9.5 4.5 19M15 9.5 19.5 19"/></svg>
       </button>
       <span class="metro" id="metro" title="Metrónomo (BPM da bateria)"></span>
-      <button class="icon-btn" id="drumBtn" title="Bateria / ritmo (d)">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="9" ry="3"/><path d="M3 6v6c0 1.7 4 3 9 3s9-1.3 9-3V6"/><path d="M3 12v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>
-      </button>
       <button class="icon-btn" id="tunerBtn" title="Afinador (g)">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3v8a3 3 0 0 0 6 0V3M10 17v4M6 21h8"/></svg>
       </button>
@@ -587,17 +582,21 @@ const DATA = [{"title": "The Scientist - Coldplay", "artist": "/Acoustic", "key"
 
 /* ---------- conjunto combinado (embebidas + do utilizador) ---------- */
 const BUILTIN = DATA;
+const BLTIDS = new Set(BUILTIN.map(s=>s.id));   // ids embebidos (vazio na versão sem músicas)
 let SONGS = [];            // preenchido no arranque
 let USER = [];             // músicas do utilizador
 const sk=a=>(a||'').replace(/^the\s+/i,'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 function rebuildSongs(){
-  const base=[];
+  const byId=new Map();
   for(const s of BUILTIN){
     if(HIDDEN.has(s.id))continue;
-    if(OVER[s.id]){const o=OVER[s.id];o.id=s.id;o._ov=true;base.push(o);}
-    else base.push(s);
+    byId.set(s.id, OVER[s.id]?Object.assign({},OVER[s.id],{id:s.id,_ov:true}):s);
   }
-  SONGS = base.concat(USER);
+  for(const k in OVER){const id=+k;          // overrides sem base embebida (import na versão vazia)
+    if(!BLTIDS.has(id)&&!HIDDEN.has(id))byId.set(id,Object.assign({},OVER[k],{id,_ov:true}));
+  }
+  for(const s of USER){if(!HIDDEN.has(s.id))byId.set(s.id,s);}   // próprias têm precedência
+  SONGS=[...byId.values()];
   SONGS.sort((x,y)=>{const a=sk(x.artist),b=sk(y.artist);if(a<b)return -1;if(a>b)return 1;
     const t=sk(x.title),u=sk(y.title);return t<u?-1:t>u?1:0;});
   if(typeof updRestoreBtn==='function')updRestoreBtn();
@@ -610,6 +609,25 @@ const store={
   get(k){try{return localStorage.getItem(k)}catch(e){return k in mem?mem[k]:null}},
   set(k,v){try{localStorage.setItem(k,v)}catch(e){mem[k]=v}}
 };
+/* ---------- armazenamento durável (IndexedDB) p/ bibliotecas grandes ---------- */
+let _db=null;
+function idbOpen(){return new Promise((res,rej)=>{
+  if(_db)return res(_db);
+  let r;try{r=indexedDB.open('musicas-acordes',1);}catch(e){return rej(e);}
+  r.onupgradeneeded=()=>{try{r.result.createObjectStore('kv');}catch(e){}};
+  r.onsuccess=()=>{_db=r.result;res(_db);};r.onerror=()=>rej(r.error);
+});}
+function idbGet(key){return idbOpen().then(db=>new Promise((res,rej)=>{
+  const t=db.transaction('kv','readonly').objectStore('kv').get(key);
+  t.onsuccess=()=>res(t.result);t.onerror=()=>rej(t.error);
+})).catch(()=>null);}
+function idbSet(key,val){return idbOpen().then(db=>new Promise((res,rej)=>{
+  const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(val,key);
+  tx.oncomplete=()=>res(true);tx.onerror=()=>rej(tx.error);
+})).catch(()=>false);}
+function libSnapshot(){return {user:USER,over:OVER,hidden:[...HIDDEN],lists,favs:[...favs],listSeq};}
+let _persistT=null;
+function schedulePersist(){clearTimeout(_persistT);_persistT=setTimeout(()=>{idbSet('lib',libSnapshot());},400);}
 const noAcc=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 
 /* ---------- estado ---------- */
@@ -1167,7 +1185,7 @@ function openEditor(song){
   $('#fSheet').value=song?linesToText(song.lines):'';
   $('#delBtn').hidden=!song;                       // remover/apagar qualquer música existente
   $('#delBtn').textContent=builtin?'Remover':'Apagar';
-  $('#resetBtn').hidden=!(builtin&&OVER[song.id]); // repor só se a embebida foi alterada
+  $('#resetBtn').hidden=!(builtin&&OVER[song.id]&&BLTIDS.has(song.id)); // repor só se há embebida original
   $('#fErr').textContent='';$('#fErr').style.color='';
   modal.hidden=false;
   updatePreview();
@@ -1331,33 +1349,35 @@ function resetBuiltin(){
   const saved=SONGS.find(s=>s.id===id);if(saved)openSong(saved);
 }
 /* backup completo */
-async function exportUser(){
-  const data={v:2,user:USER,over:OVER,hidden:[...HIDDEN],lists,favs:[...favs]};
-  if(!USER.length&&!Object.keys(OVER).length&&!lists.length&&!favs.size&&!HIDDEN.size){
-    alert('Ainda não há nada teu para exportar (músicas, listas, favoritas ou alterações).');return;}
-  const json=JSON.stringify(data,null,1);
-  const name='musicas_acordes_backup.json';
-  // 1) seletor "Guardar como" (onde houver suporte: Chrome/Edge, Android)
+async function writeJSON(json,name){
   if(window.showSaveFilePicker){
     try{
       const handle=await window.showSaveFilePicker({suggestedName:name,
         types:[{description:'Backup Músicas e Acordes',accept:{'application/json':['.json']}}]});
-      const ws=await handle.createWritable();await ws.write(json);await ws.close();
-      bkMarkSaved();return;
-    }catch(e){ if(e&&e.name==='AbortError')return;   /* cancelou */ }
-    /* outro erro -> usa o método normal abaixo */
+      const ws=await handle.createWritable();await ws.write(json);await ws.close();return true;
+    }catch(e){ if(e&&e.name==='AbortError')return false; }
   }
-  // 2) fallback (iOS/Safari/Firefox): descarrega para a pasta de transferências
   const blob=new Blob([json],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=name;a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
-  bkMarkSaved();
+  a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);return true;
+}
+async function exportUser(){
+  const data={v:2,user:USER,over:OVER,hidden:[...HIDDEN],lists,favs:[...favs]};
+  if(!hasUserData()){
+    alert('Ainda não há nada teu para exportar (músicas, listas, favoritas ou alterações).');return;}
+  if(await writeJSON(JSON.stringify(data,null,1),'musicas_acordes_alteracoes.json'))bkMarkSaved();
+}
+async function exportAll(){
+  const songs=SONGS.map(s=>({id:s.id,title:s.title,artist:s.artist,cat:s.cat,
+    key:s.key||null,capo:s.capo||null,bpm:s.bpm||null,composer:s.composer||null,lines:s.lines}));
+  if(!songs.length){alert('Não há músicas para exportar.');return;}
+  const data={v:3,full:true,songs,favs:[...favs],lists,listSeq};
+  if(await writeJSON(JSON.stringify(data),'musicas_acordes_completo.json'))bkMarkSaved();
 }
 function bkMarkSaved(){bkLast=Date.now();bkDirty=false;
   store.set('cif.lastbackup',String(bkLast));store.set('cif.dirty','0');renderBackupStatus();}
 function hasUserData(){return USER.length||Object.keys(OVER).length||lists.length||favs.size||HIDDEN.size;}
-function markDirty(){if(!bkDirty){bkDirty=true;store.set('cif.dirty','1');}renderBackupStatus();}
+function markDirty(){if(!bkDirty){bkDirty=true;store.set('cif.dirty','1');}schedulePersist();renderBackupStatus();}
 function fmtAge(ts){
   if(!ts)return null;
   const d=Date.now()-ts,day=86400000;
@@ -1392,6 +1412,22 @@ function importUser(file){
       saveUser();rebuildSongs();renderFilters();renderList();
       alert(added+(added===1?' música importada.':' músicas importadas.'));return;
     }
+    if(data&&(data.full||data.v===3)){            // cópia completa
+      const songs=Array.isArray(data.songs)?data.songs:[];
+      if(!confirm('Importar a cópia completa ('+songs.length+' músicas)? Substitui toda a tua biblioteca atual.'))return;
+      USER=[];OVER={};HIDDEN=new Set();
+      for(const s of songs){if(!s||!s.title||!Array.isArray(s.lines))continue;
+        if(typeof s.id==='number'&&s.id<100000)OVER[s.id]=s;
+        else{if(typeof s.id!=='number')s.id=nextUserId();USER.push(s);}}
+      for(const id of BLTIDS){if(!songs.some(s=>s.id===id))HIDDEN.add(id);}  // remoções verdadeiras
+      lists=Array.isArray(data.lists)?data.lists:[];
+      favs=new Set(Array.isArray(data.favs)?data.favs:[]);
+      let ls=1;for(const L of lists){const n=+String(L.id).replace(/\D/g,'');if(n>=ls)ls=n+1;}
+      listSeq=data.listSeq||ls;store.set('cif.listSeq',listSeq);
+      saveUser();saveOver();saveHidden();saveLists();saveFavs();
+      rebuildSongs();renderFilters();renderList();showWelcome();bkMarkSaved();
+      alert('Cópia completa importada ('+SONGS.length+' músicas).');return;
+    }
     if(!confirm('Importar este backup? Substitui as tuas músicas, listas, favoritas e alterações atuais.'))return;
     USER=Array.isArray(data.user)?data.user:[];
     OVER=data.over&&typeof data.over==='object'?data.over:{};
@@ -1424,6 +1460,7 @@ $('#hidAll').onclick=restoreAll;
 $('#hidList').onclick=e=>{const b=e.target.closest('[data-rest]');if(b)restoreOne(+b.dataset.rest);};
 $('#fSheet').addEventListener('input',updatePreview);
 $('#exportBtn').onclick=exportUser;
+$('#exportAllBtn').onclick=exportAll;
 $('#bkStatus').onclick=exportUser;
 sheetEl.addEventListener('click',e=>{const c=e.target.closest('.chordtok');if(c)openChordPop(c.dataset.ch);});
 $('#closeChord').onclick=closeChordPop;
@@ -1730,6 +1767,14 @@ $('#tnStrings').addEventListener('click',e=>{const b=e.target.closest('[data-str
 function showWelcome(){
   cur=null;
   wakeMaybeOff();
+  if(!SONGS.length){
+    sheetEl.innerHTML=`<div class="welcome">
+      <div class="wc-chords">G&nbsp;&nbsp;D&nbsp;&nbsp;Em&nbsp;&nbsp;C</div>
+      <div class="big">Biblioteca vazia</div>
+      <p>Esta versão começa sem músicas. Toca em <b>Importar</b> e escolhe o teu ficheiro de <b>cópia completa</b> para trazeres as tuas cifras. Ou usa <b>+ Nova música</b> para começar do zero.</p>
+    </div>`;
+    return;
+  }
   sheetEl.innerHTML=`<div class="welcome">
     <div class="wc-chords">G&nbsp;&nbsp;D&nbsp;&nbsp;Em&nbsp;&nbsp;C</div>
     <div class="big">Escolhe uma música</div>
@@ -1743,9 +1788,22 @@ function showWelcome(){
       <kbd>n</kbd><span>nova música</span>
     </div></div>`;
 }
-function boot(){
+async function boot(){
   applyTheme();
-  loadUser(); rebuildSongs();
+  loadUser();                                   // localStorage (compatibilidade)
+  try{
+    const lib=await idbGet('lib');              // fonte durável (prevalece)
+    if(lib&&typeof lib==='object'){
+      if(Array.isArray(lib.user))USER=lib.user;
+      if(lib.over&&typeof lib.over==='object')OVER=lib.over;
+      if(Array.isArray(lib.hidden))HIDDEN=new Set(lib.hidden);
+      if(Array.isArray(lib.lists))lists=lib.lists;
+      if(Array.isArray(lib.favs))favs=new Set(lib.favs);
+      if(lib.listSeq)listSeq=lib.listSeq;
+    }else{ idbSet('lib',libSnapshot()); }        // 1.ª vez: migra do localStorage
+  }catch(e){}
+  if(navigator.storage&&navigator.storage.persist){try{navigator.storage.persist();}catch(e){}}
+  rebuildSongs();
   renderFilters();
   updSpdDisplay();
   renderBackupStatus();
