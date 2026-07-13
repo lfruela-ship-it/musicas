@@ -74,18 +74,19 @@ body:not(.paper) .brand .logo{filter:invert(1)}
 /* ---- list ---- */
 .list{overflow-y:auto;flex:1;padding:4px 8px 16px}
 .group{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
-  font-family:var(--serif);font-size:15px;font-weight:600;color:var(--ink-dim);
+  font-family:var(--serif);font-size:15px;font-weight:700;color:var(--ink);
   padding:16px 12px 7px;position:sticky;top:0;z-index:2;letter-spacing:.01em;
   background:linear-gradient(var(--bg2),var(--bg2) 72%,transparent)}
-.group .gc{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--ink-faint);
+.group .gc{font-family:var(--mono);font-size:11px;font-weight:400;color:var(--ink-dim);
   background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:1px 7px}
 .song{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;
   cursor:pointer;border:1px solid transparent}
 .song:hover{background:var(--surface)}
 .song.sel{background:var(--surface);border-color:var(--line)}
 .song .t{flex:1;min-width:0}
-.song .tt{font-size:14.5px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.song .ta{font-size:12px;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song .tt{font-size:14.5px;line-height:1.25;color:var(--ink-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song:hover .tt,.song.sel .tt{color:var(--ink)}
+.song .ta{font-size:12px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .song .fav{flex:0 0 auto;font-size:15px;color:var(--ink-faint);opacity:0;transition:.12s}
 .song .fav,.favtag,.chip .star{font-variant-emoji:text;background:none}
 .song:hover .fav{opacity:.6}
@@ -396,7 +397,7 @@ input[type=range]{accent-color:var(--accent);width:96px}
     </div>
     <button class="ghost-btn restore-btn" id="restoreBtn" hidden title="Repor músicas removidas da lista"></button>
     <button class="bk-status" id="bkStatus" title="Estado da cópia de segurança"></button>
-    <div class="app-ver" id="appVer">v28</div>
+    <div class="app-ver" id="appVer">v30</div>
     <div class="list" id="list"></div>
   </aside>
 
