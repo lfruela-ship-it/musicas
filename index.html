@@ -397,7 +397,7 @@ input[type=range]{accent-color:var(--accent);width:96px}
     </div>
     <button class="ghost-btn restore-btn" id="restoreBtn" hidden title="Repor músicas removidas da lista"></button>
     <button class="bk-status" id="bkStatus" title="Estado da cópia de segurança"></button>
-    <div class="app-ver" id="appVer">v30</div>
+    <div class="app-ver" id="appVer">v31</div>
     <div class="list" id="list"></div>
   </aside>
 
@@ -1374,8 +1374,10 @@ async function exportAll(){
     key:s.key||null,capo:s.capo||null,bpm:s.bpm||null,composer:s.composer||null,lines:s.lines}));
   if(!songs.length){alert('Não há músicas para exportar.');return;}
   const data={v:3,full:true,songs,favs:[...favs],lists,listSeq};
-  if(await writeJSON(JSON.stringify(data),'musicas_acordes_completo.json'))bkMarkSaved();
+  const stamp=new Date().toISOString().slice(0,10);
+  if(await writeJSON(JSON.stringify(data),'musicas_acordes_completo_'+stamp+'.json'))bkMarkSaved();
 }
+function persistNow(){try{return idbSet('lib',libSnapshot());}catch(e){return Promise.resolve(false);}}
 function bkMarkSaved(){bkLast=Date.now();bkDirty=false;
   store.set('cif.lastbackup',String(bkLast));store.set('cif.dirty','0');renderBackupStatus();}
 function hasUserData(){return USER.length||Object.keys(OVER).length||lists.length||favs.size||HIDDEN.size;}
@@ -1427,8 +1429,8 @@ function importUser(file){
       let ls=1;for(const L of lists){const n=+String(L.id).replace(/\D/g,'');if(n>=ls)ls=n+1;}
       listSeq=data.listSeq||ls;store.set('cif.listSeq',listSeq);
       saveUser();saveOver();saveHidden();saveLists();saveFavs();
-      rebuildSongs();renderFilters();renderList();showWelcome();bkMarkSaved();
-      alert('Cópia completa importada ('+SONGS.length+' músicas).');return;
+      rebuildSongs();renderFilters();renderList();showWelcome();bkMarkSaved();persistNow();
+      alert('Cópia completa importada: '+SONGS.length+' músicas, '+lists.length+' listas, '+favs.size+' favoritas.');return;
     }
     if(!confirm('Importar este backup? Substitui as tuas músicas, listas, favoritas e alterações atuais.'))return;
     USER=Array.isArray(data.user)?data.user:[];
@@ -1440,8 +1442,8 @@ function importUser(file){
     listSeq=ls;store.set('cif.listSeq',listSeq);
     saveUser();saveOver();saveHidden();saveLists();saveFavs();
     rebuildSongs();renderFilters();renderList();showWelcome();
-    bkMarkSaved();
-    alert('Backup importado.');
+    bkMarkSaved();persistNow();
+    alert('Backup importado: '+lists.length+' listas, '+favs.size+' favoritas, '+USER.length+' músicas tuas.');
   }catch(e){alert('Ficheiro inválido. Usa um ficheiro exportado por esta app.');}};
   fr.readAsText(file);
 }
