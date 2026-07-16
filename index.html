@@ -185,7 +185,9 @@ input[type=range]{accent-color:var(--accent);width:96px}
 .scrim{position:absolute;inset:0;z-index:-1}
 
 /* ---- actions ---- */
-.actions{display:flex;gap:6px;padding:0 14px 12px;align-items:center}
+.actions{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 12px;align-items:stretch}
+.actions .add-btn{flex:1 0 100%}
+.actions .ghost-btn{flex:1 1 0;min-width:0;text-align:center;padding-left:8px;padding-right:8px}
 .add-btn{background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);
   border-radius:9px;padding:8px 13px;font-size:13.5px;font-weight:600;flex:1}
 .add-btn:hover{filter:brightness(1.07)}
@@ -390,14 +392,14 @@ input[type=range]{accent-color:var(--accent);width:96px}
     <div class="filters" id="filters"></div>
     <div class="actions">
       <button class="add-btn" id="addBtn">+ Nova música</button>
-      <button class="ghost-btn" id="exportBtn" title="Guardar só as tuas alterações (ficheiro pequeno)">Exportar</button>
-      <button class="ghost-btn" id="exportAllBtn" title="Guardar TODAS as músicas (cópia completa portável)">Exportar tudo</button>
-      <button class="ghost-btn" id="importBtn" title="Carregar músicas de um ficheiro">Importar</button>
+      <button class="ghost-btn" id="exportAllBtn" title="Guardar todas as músicas, listas e favoritas num ficheiro (cópia completa)">Exportar</button>
+      <button class="ghost-btn" id="importBtn" title="Carregar de um ficheiro (substitui tudo)">Importar</button>
+      <button class="ghost-btn" id="mergeBtn" title="Juntar um ficheiro sem apagar nada (combinar aparelhos)">Juntar</button>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
     </div>
     <button class="ghost-btn restore-btn" id="restoreBtn" hidden title="Repor músicas removidas da lista"></button>
     <button class="bk-status" id="bkStatus" title="Estado da cópia de segurança"></button>
-    <div class="app-ver" id="appVer">v31</div>
+    <div class="app-ver" id="appVer">v33</div>
     <div class="list" id="list"></div>
   </aside>
 
@@ -1405,6 +1407,69 @@ function renderBackupStatus(){
   const warn=has&&(!bkLast||(bkDirty&&Date.now()-bkLast>7*86400000));
   const mb=$('#menuBtn');if(mb)mb.classList.toggle('warn',warn);
 }
+function songEq(a,b){
+  return !!a&&!!b&&a.title===b.title&&a.artist===b.artist&&(a.cat||'')===(b.cat||'')
+    &&(a.key||'')===(b.key||'')&&(a.capo||'')===(b.capo||'')&&(a.bpm||'')===(b.bpm||'')
+    &&(a.composer||'')===(b.composer||'')&&JSON.stringify(a.lines)===JSON.stringify(b.lines);
+}
+function normalizeIncoming(data){                       // devolve {over,user,favs,lists}
+  if(data&&(data.full||data.v===3)){
+    const base=new Map(BUILTIN.map(s=>[s.id,s])),over={},user=[];
+    for(const s of (data.songs||[])){
+      if(!s||!s.title||!Array.isArray(s.lines))continue;
+      if(typeof s.id==='number'&&s.id<100000){ if(!songEq(s,base.get(s.id)))over[s.id]=s; }
+      else user.push(s);
+    }
+    return {over,user,favs:data.favs||[],lists:data.lists||[]};
+  }
+  return {over:(data&&data.over&&typeof data.over==='object')?data.over:{},
+    user:Array.isArray(data&&data.user)?data.user:[],
+    favs:Array.isArray(data&&data.favs)?data.favs:[],
+    lists:Array.isArray(data&&data.lists)?data.lists:[]};
+}
+function mergeImport(file){
+  const fr=new FileReader();
+  fr.onload=()=>{ try{
+    const inc=normalizeIncoming(JSON.parse(fr.result));
+    if(!confirm('Juntar este ficheiro à biblioteca atual? Não apaga nada — só acrescenta o que faltar.'))return;
+    let addSongs=0,dupSongs=0,edits=0,newLists=0,listAdds=0,addFavs=0;
+    const keyOf=s=>sk(s.title)+'\u0001'+sk(s.artist);
+    const idxByKey=new Map();for(const s of SONGS)idxByKey.set(keyOf(s),s.id);
+    const remap=new Map();
+    // 1) músicas próprias — por conteúdo (título+artista)
+    for(const s of inc.user){
+      if(!s||!s.title||!Array.isArray(s.lines))continue;
+      const k=keyOf(s);
+      if(idxByKey.has(k)){remap.set(s.id,idxByKey.get(k));dupSongs++;}
+      else{const nid=nextUserId();USER.push(Object.assign({},s,{id:nid}));
+        idxByKey.set(k,nid);if(typeof s.id==='number')remap.set(s.id,nid);addSongs++;}
+    }
+    // 2) edições às embebidas — só onde não tenho já override e não removi
+    for(const k in inc.over){const id=+k;
+      if(!BLTIDS.has(id)||HIDDEN.has(id))continue;
+      if(!OVER[id]){OVER[id]=inc.over[k];edits++;}
+    }
+    // 3) favoritas — união (remapeando as próprias)
+    for(const fid of inc.favs){let id=fid;
+      if(typeof fid==='number'&&fid>=100000){if(!remap.has(fid))continue;id=remap.get(fid);}
+      if(!favs.has(id)){favs.add(id);addFavs++;}
+    }
+    // 4) listas — por nome; união das músicas
+    const byName=new Map();for(const L of lists)byName.set(sk(L.name),L);
+    for(const IL of inc.lists){
+      if(!IL||!IL.name)continue;
+      const songs=(IL.songs||[]).map(id=>(typeof id==='number'&&id>=100000)?remap.get(id):id).filter(id=>id!=null);
+      const ex=byName.get(sk(IL.name));
+      if(ex){const set=new Set(ex.songs);for(const id of songs)if(!set.has(id)){ex.songs.push(id);set.add(id);listAdds++;}}
+      else{const nl={id:newListId(),name:IL.name,songs:songs.slice()};lists.push(nl);byName.set(sk(IL.name),nl);newLists++;}
+    }
+    saveUser();saveOver();saveFavs();saveLists();
+    rebuildSongs();renderFilters();renderList();showWelcome();persistNow();
+    alert('Juntado: +'+addSongs+' músicas novas, +'+edits+' edições, +'+newLists+' listas novas, +'+listAdds+' músicas em listas, +'+addFavs+' favoritas.'
+      +(dupSongs?'\n('+dupSongs+' músicas já existentes foram mantidas como estavam.)':''));
+  }catch(e){alert('Ficheiro inválido. Usa um ficheiro exportado por esta app.');}};
+  fr.readAsText(file);
+}
 function importUser(file){
   const fr=new FileReader();
   fr.onload=()=>{try{
@@ -1463,14 +1528,15 @@ $('#hidClose').onclick=$('#hidDone').onclick=$('#hidScrim').onclick=()=>{$('#hid
 $('#hidAll').onclick=restoreAll;
 $('#hidList').onclick=e=>{const b=e.target.closest('[data-rest]');if(b)restoreOne(+b.dataset.rest);};
 $('#fSheet').addEventListener('input',updatePreview);
-$('#exportBtn').onclick=exportUser;
 $('#exportAllBtn').onclick=exportAll;
 $('#bkStatus').onclick=exportUser;
 sheetEl.addEventListener('click',e=>{const c=e.target.closest('.chordtok');if(c)openChordPop(c.dataset.ch);});
 $('#closeChord').onclick=closeChordPop;
 $('#chordScrim').onclick=closeChordPop;
-$('#importBtn').onclick=()=>$('#importFile').click();
-$('#importFile').addEventListener('change',e=>{if(e.target.files[0])importUser(e.target.files[0]);e.target.value='';});
+let _impMode='replace';
+$('#importBtn').onclick=()=>{_impMode='replace';$('#importFile').click();};
+$('#mergeBtn').onclick=()=>{_impMode='merge';$('#importFile').click();};
+$('#importFile').addEventListener('change',e=>{if(e.target.files[0]){_impMode==='merge'?mergeImport(e.target.files[0]):importUser(e.target.files[0]);}e.target.value='';});
 
 /* ---------- bateria / ritmo ---------- */
 const DR_PAT={
