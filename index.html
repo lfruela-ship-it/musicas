@@ -306,6 +306,30 @@ input[type=range]{accent-color:var(--accent);width:96px}
 
 /* ---- versão ---- */
 .app-ver{text-align:center;font-size:10.5px;color:var(--ink-faint);margin-top:6px;letter-spacing:.04em}
+
+/* ---- modo atuação ---- */
+.perf-entry{width:100%;margin:6px 0 10px;padding:11px;border-radius:12px;border:0;
+  background:var(--accent);color:var(--accent-ink);font-family:var(--sans);font-weight:600;font-size:14px;cursor:pointer}
+.perf-bar{position:absolute;left:0;right:0;bottom:0;z-index:40;display:flex;align-items:center;gap:10px;
+  padding:10px 14px calc(12px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(transparent,var(--bg) 34%);border-top:1px solid var(--line)}
+.perf-x{width:38px;height:44px;border-radius:11px;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink-dim);font-size:15px;flex:0 0 auto;cursor:pointer}
+.perf-nav{height:52px;min-width:52px;border-radius:13px;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink);font-size:26px;line-height:1;cursor:pointer;flex:0 0 auto}
+.perf-nav.big{flex:1;background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.perf-nav:disabled{opacity:.35}
+.perf-mid{flex:2;min-width:0;display:flex;flex-direction:column;gap:2px;align-items:center;text-align:center}
+.perf-count{font-family:var(--mono);font-size:12px;color:var(--ink-dim)}
+.perf-next{font-size:12px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+body.perform .sidebar{display:none}
+body.perform .app{grid-template-columns:1fr}
+body.perform #sheet{padding-bottom:92px}
+/* ---- reordenar setlist ---- */
+.setlist-row{touch-action:none}
+.setlist-row .drag{flex:0 0 auto;cursor:grab;color:var(--ink-faint);font-size:17px;padding:0 4px;user-select:none}
+.setlist-row.dragging{opacity:.6;background:var(--surface);border-radius:10px}
+.setlist-row .ta{font-size:12px;color:var(--ink-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sheet-tools{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 8px}
 .detect-btn,.paste-btn{font-size:12.5px;padding:6px 11px}
 .restore-btn{width:100%;margin-top:2px;font-size:12.5px;color:var(--ink-dim)}
@@ -399,7 +423,7 @@ input[type=range]{accent-color:var(--accent);width:96px}
     </div>
     <button class="ghost-btn restore-btn" id="restoreBtn" hidden title="Repor músicas removidas da lista"></button>
     <button class="bk-status" id="bkStatus" title="Estado da cópia de segurança"></button>
-    <div class="app-ver" id="appVer">v33</div>
+    <div class="app-ver" id="appVer">v35</div>
     <div class="list" id="list"></div>
   </aside>
 
@@ -441,6 +465,15 @@ input[type=range]{accent-color:var(--accent);width:96px}
       <div id="sheet"></div>
     </div>
     <div class="playhead" id="playhead" aria-hidden="true"><span class="ph-dot"></span></div>
+    <div class="perf-bar" id="perfBar" hidden>
+      <button class="perf-x" id="perfExit" title="Sair da atuação (Esc)">✕</button>
+      <button class="perf-nav" id="perfPrev" title="Anterior (←)">‹</button>
+      <div class="perf-mid">
+        <span class="perf-count" id="perfCount"></span>
+        <span class="perf-next" id="perfNextName"></span>
+      </div>
+      <button class="perf-nav big" id="perfNext" title="Próxima (→)">›</button>
+    </div>
   </main>
 </div>
 
@@ -758,23 +791,45 @@ function matches(s,qn){
 }
 function renderList(){
   const qn=noAcc($('#q').value.trim());
-  filtered=SONGS.filter(s=>matches(s,qn));
-  // contar músicas por artista no conjunto filtrado
+  const isList=filter.type==='list';
+  const L=isList?lists.find(l=>l.id===filter.id):null;
+  if(isList&&L){                                   // ordem da lista (setlist)
+    const byId=new Map(SONGS.map(s=>[s.id,s]));
+    filtered=L.songs.map(id=>byId.get(id)).filter(s=>s&&matches(s,qn));
+  }else{
+    filtered=SONGS.filter(s=>matches(s,qn));
+  }
   const cnt={};for(const s of filtered)cnt[s.artist]=(cnt[s.artist]||0)+1;
   const nArt=Object.keys(cnt).length;
   $('#tot').textContent=`${filtered.length} ${filtered.length===1?'música':'músicas'} · ${nArt} ${nArt===1?'artista':'artistas'}`;
   if(!filtered.length){listEl.innerHTML='<div class="empty-list">Nada encontrado.<br>Tenta outro termo ou muda o filtro.</div>';return;}
-  let html='',lastG=null;
-  for(const s of filtered){
-    if(s.artist!==lastG){lastG=s.artist;
-      html+=`<div class="group"><span>${esc(s.artist)}</span><span class="gc">${cnt[s.artist]}</span></div>`;}
-    const on=favs.has(s.id)?' on':'';
-    html+=`<div class="song${cur&&cur.id===s.id?' sel':''}" data-id="${s.id}">
-      <div class="t"><div class="tt">${esc(s.title)}</div></div>
-      ${s.key?`<span class="key">${esc(s.key)}</span>`:''}
-      <button class="fav${on}" data-fav="${s.id}" title="Favorita (f)">★︎</button></div>`;
+  let html='';
+  if((isList||filter.type==='fav')&&filtered.length){
+    html+=`<button class="perf-entry" id="perfBtn">▶ Atuar${isList?' ('+filtered.length+')':''}</button>`;
+  }
+  if(isList){                                      // vista de setlist: ordem da lista, arrastável
+    html+='<div class="setlist" id="setlist">';
+    for(const s of filtered){
+      html+=`<div class="song setlist-row${cur&&cur.id===s.id?' sel':''}" data-id="${s.id}">
+        <span class="drag" data-drag title="Arrastar para reordenar">≡</span>
+        <div class="t"><div class="tt">${esc(s.title)}</div><div class="ta">${esc(s.artist)}</div></div>
+        ${s.key?`<span class="key">${esc(s.key)}</span>`:''}
+        <button class="fav${favs.has(s.id)?' on':''}" data-fav="${s.id}" title="Favorita (f)">★︎</button></div>`;
+    }
+    html+='</div>';
+  }else{                                           // vista normal agrupada por artista
+    let lastG=null;
+    for(const s of filtered){
+      if(s.artist!==lastG){lastG=s.artist;
+        html+=`<div class="group"><span>${esc(s.artist)}</span><span class="gc">${cnt[s.artist]}</span></div>`;}
+      html+=`<div class="song${cur&&cur.id===s.id?' sel':''}" data-id="${s.id}">
+        <div class="t"><div class="tt">${esc(s.title)}</div></div>
+        ${s.key?`<span class="key">${esc(s.key)}</span>`:''}
+        <button class="fav${favs.has(s.id)?' on':''}" data-fav="${s.id}" title="Favorita (f)">★︎</button></div>`;
+    }
   }
   listEl.innerHTML=html;
+  if(isList)initSetlistDrag();
 }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
@@ -1011,7 +1066,7 @@ function setSpd(v){scrollSpeed=Math.max(1,Math.min(20,v));store.set('cif.spd',sc
 function startScroll(){if(scrolling||!cur)return;scrolling=true;
   $('#scrollBtn').classList.add('active');$('#scrollBtn').innerHTML='❚❚ <span class="lab">parar</span>';
   const ph=$('#playhead');if(ph)ph.classList.add('on');
-  if(typeof drLinkScroll!=='undefined'&&drLinkScroll&&!drPlaying){drStart();drumByScroll=true;}
+  if(!perfMode&&typeof drLinkScroll!=='undefined'&&drLinkScroll&&!drPlaying){drStart();drumByScroll=true;}
   raf=requestAnimationFrame(scrollStep);}
 function stopScroll(){scrolling=false;if(raf)cancelAnimationFrame(raf);
   const ph=$('#playhead');if(ph)ph.classList.remove('on');
@@ -1020,6 +1075,75 @@ function stopScroll(){scrolling=false;if(raf)cancelAnimationFrame(raf);
 $('#scrollBtn').onclick=()=>scrolling?stopScroll():startScroll();
 $('#spdUp').onclick=()=>{if(!scrollBpmSync)setSpd(scrollSpeed+1);};
 $('#spdDown').onclick=()=>{if(!scrollBpmSync)setSpd(scrollSpeed-1);};
+
+/* ---------- modo atuação ---------- */
+let perfMode=false, perfList=[], perfIdx=0;
+function startPerform(songs){
+  if(!songs||!songs.length)return;
+  perfMode=true; perfList=songs.slice(); perfIdx=0;
+  if(drPlaying)drStop();                       // sem bateria no modo atuação
+  document.body.classList.add('perform');
+  $('#app').classList.remove('nav');
+  perfOpen(0);
+}
+function perfOpen(i){
+  perfIdx=Math.max(0,Math.min(perfList.length-1,i));
+  const keepScroll=scrolling;                  // decisão: arranca só se já estava ligada
+  stopScroll();
+  openSong(perfList[perfIdx]);
+  const sc=$('#scroll');if(sc)sc.scrollTop=0;
+  renderPerfBar();
+  if(keepScroll)requestAnimationFrame(()=>{if(perfMode&&cur)startScroll();});
+}
+function perfNext(){if(perfIdx<perfList.length-1)perfOpen(perfIdx+1);}
+function perfPrev(){if(perfIdx>0)perfOpen(perfIdx-1);}
+function endPerform(){perfMode=false;stopScroll();document.body.classList.remove('perform');renderPerfBar();}
+function renderPerfBar(){
+  const bar=$('#perfBar');if(!bar)return;
+  bar.hidden=!perfMode;
+  if(!perfMode)return;
+  const nxt=perfList[perfIdx+1];
+  $('#perfCount').textContent=(perfIdx+1)+' / '+perfList.length;
+  $('#perfNextName').textContent=nxt?('a seguir: '+nxt.title):'última música';
+  $('#perfPrev').disabled=perfIdx===0;
+  $('#perfNext').disabled=perfIdx>=perfList.length-1;
+}
+$('#perfPrev').onclick=perfPrev;
+$('#perfNext').onclick=perfNext;
+$('#perfExit').onclick=endPerform;
+/* reordenar setlist (arrastar) */
+function saveSetlistOrder(ids){
+  if(filter.type!=='list')return;
+  const L=lists.find(l=>l.id===filter.id);if(!L)return;
+  const seen=new Set(ids);
+  L.songs=ids.concat(L.songs.filter(id=>!seen.has(id)));   // ids fora da vista ficam no fim
+  saveLists();
+}
+function initSetlistDrag(){
+  const box=$('#setlist');if(!box)return;
+  box.querySelectorAll('[data-drag]').forEach(h=>{
+    h.addEventListener('pointerdown',e=>{
+      e.preventDefault();e.stopPropagation();
+      const row=h.closest('.setlist-row');if(!row)return;
+      row.classList.add('dragging');
+      try{h.setPointerCapture(e.pointerId);}catch(_){}
+      const move=ev=>{
+        const y=ev.clientY;
+        const others=[...box.querySelectorAll('.setlist-row:not(.dragging)')];
+        const after=others.find(r=>{const rc=r.getBoundingClientRect();return y<rc.top+rc.height/2;});
+        if(after)box.insertBefore(row,after);else box.appendChild(row);
+      };
+      const up=()=>{
+        document.removeEventListener('pointermove',move);
+        document.removeEventListener('pointerup',up);
+        row.classList.remove('dragging');
+        saveSetlistOrder([...box.querySelectorAll('.setlist-row')].map(r=>+r.dataset.id));
+      };
+      document.addEventListener('pointermove',move);
+      document.addEventListener('pointerup',up);
+    });
+  });
+}
 
 /* ---------- theme ---------- */
 function applyTheme(){document.getElementById('app').parentElement; 
@@ -1094,6 +1218,8 @@ $('#q').addEventListener('input',renderList);
 
 /* ---------- cliques na lista ---------- */
 listEl.addEventListener('click',e=>{
+  if(e.target.closest('#perfBtn')){startPerform(filtered);return;}
+  if(e.target.closest('[data-drag]'))return;      // pega de arrastar não abre música
   const fav=e.target.closest('[data-fav]');
   if(fav){const id=+fav.dataset.fav;if(favs.has(id))favs.delete(id);else favs.add(id);
     saveFavs();fav.classList.toggle('on');renderFilters();
@@ -1128,6 +1254,13 @@ function move(d){if(!filtered.length)return;let i=curIndex();i=i<0?0:i+d;
   i=Math.max(0,Math.min(filtered.length-1,i));const s=filtered[i];if(s){openSong(s);
     const el=listEl.querySelector(`.song[data-id="${s.id}"]`);if(el)el.scrollIntoView({block:'nearest'});}}
 document.addEventListener('keydown',e=>{
+  // modo atuação: setas mudam de música, Esc sai
+  if(perfMode){
+    if(e.key==='Escape'){e.preventDefault();endPerform();return;}
+    if(e.key==='ArrowRight'){e.preventDefault();perfNext();return;}
+    if(e.key==='ArrowLeft'){e.preventDefault();perfPrev();return;}
+    if(e.key===' '){e.preventDefault();scrolling?stopScroll():startScroll();return;}
+  }
   // diagrama de acorde aberto: só Esc fecha
   if(!$('#chordPop').hidden){if(e.key==='Escape'){e.preventDefault();closeChordPop();}return;}
   // músicas removidas aberto: só Esc fecha
